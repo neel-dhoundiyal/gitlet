@@ -1,0 +1,158 @@
+Gitlet Design Document
+----------------------
+
+Classes and Data Structures
+---------------------------
+**** Blob ****
+
+ Represents the contents of the file in the Gitlet repository.
+
+ ** Fields **
+
+ String _name : Stores the name of the file.
+ String _hashCodeBlob : Stores the hash code.
+ String _content : String content of the file.
+ byte[] _contentStream : Stores the byte stream values in an array.
+
+**** Commit ****
+
+  A commit, therefore, will consist of a log message, timestamp,
+  a mapping of file names to blob references, a parent reference,
+  and (for merges) a second parent reference.
+
+  ** Fields **
+
+  HashMap<String, Blob> _blobs : Hashes blob references to file names.
+  String _logMessage :  Log message while committing.
+  String _timeStamp : Time stamp of the commit.
+  String _parent : Parent reference of the commit.
+  String _parentMerge : Second parent reference in the case of a merge.
+  boolean _merge : True, if a merge is happening else False.
+  String _hashCodeCommit : Hash code for a particular commit.
+  String _branch : Current branch of the commit.
+
+**** Gitlet ****
+
+    Represents a gitlet repository, a version control system.
+
+    Note: The Gitlet object needs to be serializable so that we can keep track of the commit tree.
+
+    ** Fields **
+
+    Commit _head: Will point at the head
+    private HashMap<String, Blob> _staged: All the files currently staged.
+    private HashMap<String, Blob> _tracked: All the files currently tracked.
+    private HashMap<String, Blob> _untracked: All the files currently not tracked.
+    private HashMap<String, Commit> _commits: All the commits in the Gitlet repo.
+    private String _currentBranch: Current branch of the head commit.
+    private HashMap<String, Blob>  _allBlobs: All the blobs in the Gitlet repo.
+    private HashMap<String, String> _branch: Maps the commit hashcode to the branch it is on.
+
+Algorithms
+----------
+
+**** Gitlet ****
+
+    init(): Creates a '.gitlet' directory as well as a 'commits' and 'staged' sub-directories within .gitlet.
+            It also creates the inital commit using the Commit() constructor and adds it to the commit tree(_commits).
+            It also creates a 'info' subdirectory within '.gitlet' to store serialized versions of the Gitlet object, this
+            will help in keeping track of the status of the Gitlet object across multiple runs.
+
+    add(String filepath): Adds the file at 'filepath' to the staging area. This will be tracked by adding the related
+                          Blob information in the _staged HashMap as well as writing this serialized information in the 'staged'
+                          subdirectory in '.gitlet'.
+                          - _traverse through _staging(ArrayList)
+                            - check name
+                                - check hashcode
+                                    true: break;
+                                    false: replace
+                          - otherwise add it normally
+                          ("Staging an already-staged file overwrites the previous entry in the staging area with the new contents.
+                          The staging area should be somewhere in .gitlet. If the current working version of the file is identical to
+                          the version in the current commit, do not stage it to be added, and remove it from the staging area if it is
+                          already there (as can happen when a file is changed, added, and then changed back). If the file had been marked
+                          to be removed (see gitlet rm), delete that mark.") - Conditions to follow.
+
+    commit(String log): Creates a new commit and adds it to the commit tree. This involves adding it to the _commits HashMap,
+                        changing _head value to the hashcode of the new commit as well as writing the new commit in the 'commit'
+                        subdirectory. A commit contains the same stuff as its parent except for the files that are staged or removed.
+                        The staging area is cleared after a commit. (Clear 'staged' subdir and _staged HashMap)
+
+    log(): Starting at the current head commit, display information about each commit backwards along the commit tree until
+           the initial commit, following the first parent commit links, ignoring any second parents found in merge commits.
+           It has to be along the current branch which is tracked by _currentBranch as well as by the _branch HashMap that
+           maps the hashcode of a commit to the branch its on which helps in checking the branch of a commit.
+
+    global-log(): Outputs the entire commit history in no particular order.
+
+    find(String message): (Prints out the ids of all commits that have the given commit message, one per line.
+                          If there are multiple such commits, it prints the ids out on separate lines. The commit message
+                          is a single operand; to indicate a multiword message, put the operand in quotation marks, as for
+                          the commit command below.) Go through the _commits HashMap and check message against the commit object's
+                          _logMessage.
+
+    status(): Displays what branches currently exist, and marks the current branch with a *.
+              Also displays what files have been staged or marked for untracking.
+
+
+    checkout(ArrayList<String> operands):
+            - operands.size() == 2 (checkout -- [file name])
+                - Takes the version of the file as it exists in the head commit, the front of the current branch,
+                  and puts it in the working directory, overwriting the version of the file that's already there if there is one.
+                  The new version of the file is not staged.
+                - If the file does not exist in the previous commit, aborts, printing the error message
+                  File does not exist in that commit.
+
+            - operands.size() == 3 (checkout [commit id] -- [file name])
+                 - Takes the version of the file as it exists in the commit with the given id,
+                   and puts it in the working directory, overwriting the version of the file that's already there if there is one.
+                   The new version of the file is not staged.
+                 - If no commit with the given id exists, print No commit with that id exists.
+                   Else, if the file does not exist in the given commit, print the same message as for failure case 1.
+
+    branch(String branch): Creates a new branch with the given name, and points it at the current head node.
+                           A branch is nothing more than a name for a reference (a SHA-1 identifier) to a commit node.
+                           This command does NOT immediately switch to the newly created branch (just as in real Git).
+                           Before you ever call branch, your code should be running with a default branch called "master".
+                                - If a branch with the given name already exists, print the error message
+                                   A branch with that name already exists.
+
+
+    rm-branch(String branch): Deletes the branch with the given name. This only means to delete the pointer associated with the branch;
+                              it does not mean to delete all commits that were created under the branch, or anything like that.
+
+    reset(String commitid): Checks out all the files tracked by the given commit. Removes tracked files that are not present
+                            in that commit. Also moves the current branch's head to that commit node. See the intro for an
+                            example of what happens to the head pointer after using reset. The [commit id] may be abbreviated
+                            as for checkout. The staging area is cleared. The command is essentially checkout of an arbitrary
+                            commit that also changes the current branch head.
+
+
+    merge (String branch): Latest Common ancestor: A latest common ancestor is a common ancestor
+                                             that is not an ancestor of any other common ancestor.
+              Case 1: If the split point is the same commit as the given branch, then we do nothing;
+              the merge is complete, and the operation ends with the message Given branch is
+              an ancestor of the current branch.
+              Case 2: If the split point is the current branch, then the current branch is set to
+              the same commit as the given branch and the operation ends after printing the message
+              Current branch fast-forwarded. Otherwise, we continue with the steps below.
+
+
+
+Persistence
+-----------
+
+The Gitlet object can be serialized and stored somewhere in the '.gitlet' directory. When we run Main.java,
+the Gitlet repo needs to revert to its original state. We can unserialize this object and copy the contents into
+the 'current' Gitlet object. The commit tree and other important information such as the branches and files(Blobs) needs to be
+maintained across multiple runs and commands. This information exists in the Gitlet object and through serialization, it can be
+maintained. (Important)
+
+Arising Questions
+-----------
+- How does checkout work? Commiting after a checkout?
+- Commiting with multiple branches?
+- Merge hash code and how does merge work?
+- Differences between tracked, untracked and staged files?
+
+
